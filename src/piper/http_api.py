@@ -27,7 +27,14 @@ API_KEY = os.environ.get("PIPER_API_KEY", "")
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """Middleware to check API key if PIPER_API_KEY is set."""
     
+    # Endpoints that don't require authentication
+    PUBLIC_PATHS = {"/health", "/healthz", "/ready"}
+    
     async def dispatch(self, request: Request, call_next):
+        # Skip auth for health check endpoints
+        if request.url.path in self.PUBLIC_PATHS:
+            return await call_next(request)
+        
         if not API_KEY:
             # No API key configured, allow all requests
             return await call_next(request)
@@ -145,6 +152,17 @@ def main() -> None:
     if API_KEY:
         app.add_middleware(APIKeyMiddleware)
         _LOGGER.info("API key authentication enabled")
+
+    @app.get("/health")
+    @app.get("/healthz")
+    @app.get("/ready")
+    async def health_check() -> Dict[str, Any]:
+        """Health check endpoint - no auth required."""
+        return {
+            "status": "ok",
+            "model": default_model_id,
+            "voices_loaded": len(loaded_voices)
+        }
 
     @app.get("/voices")
     async def app_voices() -> Dict[str, Any]:
