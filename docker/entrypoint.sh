@@ -5,8 +5,8 @@ DATA_DIR='/data'
 COMMAND="$1"
 shift
 
-# Default voice model to download if none specified
-DEFAULT_VOICE="${PIPER_DEFAULT_VOICE:-de_DE-thorsten-medium}"
+# Default voice model from environment variable
+DEFAULT_MODEL="${PIPER_MODEL:-/data/de_DE-thorsten-medium.onnx}"
 
 case "${COMMAND}" in
   speak)
@@ -16,17 +16,11 @@ case "${COMMAND}" in
     exec python3 -m piper.download_voices --data-dir "${DATA_DIR}" "$@"
     ;;
   server)
-    # Extract model path from arguments
+    # Use model from args or default from environment
     MODEL_PATH=""
-    for arg in "$@"; do
-      if [[ "$arg" == /data/*.onnx ]]; then
-        MODEL_PATH="$arg"
-        break
-      fi
-    done
-    
-    # If model path provided via -m flag, extract it
     ARGS=("$@")
+    
+    # Check if -m flag is provided
     for i in "${!ARGS[@]}"; do
       if [[ "${ARGS[$i]}" == "-m" ]] && [[ -n "${ARGS[$((i+1))]}" ]]; then
         MODEL_PATH="${ARGS[$((i+1))]}"
@@ -34,8 +28,15 @@ case "${COMMAND}" in
       fi
     done
     
+    # If no -m flag, use default model
+    if [[ -z "$MODEL_PATH" ]]; then
+      MODEL_PATH="$DEFAULT_MODEL"
+      # Add -m flag to args
+      set -- "-m" "$MODEL_PATH" "$@"
+    fi
+    
     # Auto-download voice model if it doesn't exist
-    if [[ -n "$MODEL_PATH" ]] && [[ ! -f "$MODEL_PATH" ]]; then
+    if [[ ! -f "$MODEL_PATH" ]]; then
       # Extract voice name from path (e.g., /data/de_DE-thorsten-medium.onnx -> de_DE-thorsten-medium)
       VOICE_NAME=$(basename "$MODEL_PATH" .onnx)
       echo "Voice model not found: $MODEL_PATH"
@@ -44,6 +45,7 @@ case "${COMMAND}" in
       echo "Download complete."
     fi
     
+    echo "Starting Piper TTS server with model: $MODEL_PATH"
     exec python3 -m piper.http_api --host 0.0.0.0 --data-dir "${DATA_DIR}" "$@"
     ;;
   ""|help|-h|--help)
@@ -54,8 +56,8 @@ case "${COMMAND}" in
     echo "  server       Run HTTP server"
     echo ""
     echo "Environment variables:"
-    echo "  PIPER_API_KEY         API key for authentication (optional)"
-    echo "  PIPER_DEFAULT_VOICE   Default voice to download (default: de_DE-thorsten-medium)"
+    echo "  PIPER_API_KEY   API key for authentication (optional)"
+    echo "  PIPER_MODEL     Path to voice model (default: /data/de_DE-thorsten-medium.onnx)"
     exit 0
     ;;
   *)

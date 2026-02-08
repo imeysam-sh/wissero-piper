@@ -30,4 +30,9 @@ RUN chmod +x /entrypoint.sh && sed -i 's/\r$//' /entrypoint.sh
 
 EXPOSE 5000
 
+# Default model - can be overridden via environment variable
+ENV PIPER_MODEL=/data/de_DE-thorsten-medium.onnx
+
 ENTRYPOINT ["/entrypoint.sh"]
+CMD ["server"]
+
