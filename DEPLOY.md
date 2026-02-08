@@ -5,93 +5,94 @@ This guide explains how to deploy the Piper TTS server with streaming support us
 ## Prerequisites
 
 - **Docker** installed on your server.
-- Git (to clone the repository).
+- Git access to this repository.
+
+---
 
 ## Deployment with Coolify
 
 Coolify can build directly from the Dockerfile in this repository.
 
-1. **Add a new service** in Coolify pointing to this Git repository.
-2. **Set environment variables** in Coolify's service settings:
-   - `PIPER_API_KEY`: Your secret API key (optional, but recommended for security).
-3. **Configure the start command** (if needed):
-   ```
-   server -m /data/de_DE-thorsten-medium.onnx
-   ```
-4. **Mount a persistent volume** at `/data` to store voice models.
-5. **Download a voice** before first use:
-   ```bash
-   docker exec <container_id> python3 -m piper.download_voices --data-dir /data de_DE-thorsten-medium
-   ```
+### 1. Create New Service
 
-## Manual Docker Deployment
+1. In Coolify, create a new **Docker** service
+2. Point it to: `https://github.com/imeysam-sh/wissero-piper.git`
+3. Build path: `/` (root)
 
-### 1. Clone the Repository
+### 2. Configure Environment Variables
 
-```bash
-git clone https://github.com/imeysam-sh/wissero-piper.git
-cd wissero-piper
+| Variable | Value | Required |
+|----------|-------|----------|
+| `PIPER_API_KEY` | `your-secret-api-key` | Recommended |
+
+### 3. Add Volume Mount
+
+| Field | Value |
+|-------|-------|
+| **Name** | `piper-data` |
+| **Source Path** | (leave empty or custom path) |
+| **Destination Path** | `/data` |
+
+### 4. Set Start Command
+
+In Coolify's configuration, find **"Custom Start Command"** or **"Docker Command"** and set:
+
+```
+server -m /data/de_DE-thorsten-medium.onnx
 ```
 
-### 2. Build the Docker Image
+### 5. Deploy
 
-```bash
-docker build -t piper .
-```
+Click **Deploy**. The container will:
+1. Start up
+2. **Automatically download** the voice model if it doesn't exist
+3. Start the API server
 
-### 3. Download Voice Models
+**No SSH or manual steps required!**
 
-Create a directory for voice data and download a model:
-
-```bash
-mkdir piper_data
-docker run --rm -v $(pwd)/piper_data:/data piper download de_DE-thorsten-medium
-```
-
-### 4. Run the Server
-
-**Without API key (open access):**
-```bash
-docker run -d -p 5000:5000 -v $(pwd)/piper_data:/data --name piper_server piper server -m /data/de_DE-thorsten-medium.onnx
-```
-
-**With API key (recommended for production):**
-```bash
-docker run -d -p 5000:5000 \
-  -e PIPER_API_KEY="your-secret-key-here" \
-  -v $(pwd)/piper_data:/data \
-  --name piper_server \
-  piper server -m /data/de_DE-thorsten-medium.onnx
-```
+---
 
 ## API Authentication
 
-When `PIPER_API_KEY` is set, all requests must include the key using one of these methods:
+When `PIPER_API_KEY` is set, **all requests must include the key**.
 
-1. **Authorization header (recommended):**
-   ```bash
-   curl -H "Authorization: Bearer your-secret-key-here" \
-     -X POST -d '{"text": "Hello"}' http://localhost:5000/
-   ```
+### Your Client (Wissero) Must Send:
 
-2. **X-API-Key header:**
-   ```bash
-   curl -H "X-API-Key: your-secret-key-here" \
-     -X POST -d '{"text": "Hello"}' http://localhost:5000/
-   ```
+```javascript
+// Example: calling from your Next.js app
+const response = await fetch('https://your-piper-server.com/', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_API_KEY_HERE'
+  },
+  body: JSON.stringify({ 
+    text: 'Hello world',
+    length_scale: 1.3,
+    output_raw: true
+  })
+});
+```
 
-3. **Query parameter:**
-   ```bash
-   curl -X POST -d '{"text": "Hello"}' "http://localhost:5000/?api_key=your-secret-key-here"
-   ```
+### Supported Authentication Methods:
+
+| Method | Header/Param |
+|--------|--------------|
+| Bearer Token | `Authorization: Bearer <key>` |
+| API Key Header | `X-API-Key: <key>` |
+| Query Parameter | `?api_key=<key>` |
+
+---
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/` | Synthesize speech (supports streaming) |
-| `GET` | `/voices` | List downloaded voices |
+| `POST` | `/` | Synthesize speech |
+| `GET` | `/voices` | List available voices |
 | `POST` | `/download` | Download a new voice |
+
+---
 
 ## Request Parameters
 
@@ -110,9 +111,16 @@ When `PIPER_API_KEY` is set, all requests must include the key using one of thes
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `text` | string | required | Text to synthesize |
-| `output_raw` | boolean | false | Return raw PCM instead of WAV |
+| `output_raw` | boolean | false | Return raw PCM (no WAV header) |
 | `length_scale` | float | 1.0 | Speech speed (higher = slower) |
-| `noise_scale` | float | 0.667 | Voice variability |
-| `noise_w_scale` | float | 0.8 | Phoneme width variability |
-| `voice` | string | default | Voice model to use |
-| `speaker_id` | int | 0 | Speaker ID for multi-speaker models |
+
+---
+
+## Changing Voice Models
+
+To use a different voice:
+
+1. Update the start command: `server -m /data/<voice-name>.onnx`
+2. Redeploy - the new voice will be auto-downloaded
+
+Available voices: https://huggingface.co/rhasspy/piper-voices
