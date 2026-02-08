@@ -1,14 +1,15 @@
 FROM python:3.12 AS builder
 
 RUN apt-get update && \
-    apt-get install --yes --no-install-recommends \
-      build-essential cmake ninja-build git
+  apt-get install --yes --no-install-recommends \
+  build-essential cmake ninja-build git
 
 WORKDIR /app
 
 COPY pyproject.toml setup.py CMakeLists.txt MANIFEST.in README.md ./
 COPY src/piper/ ./src/piper/
 COPY script/setup script/dev_build script/package ./script/
+RUN chmod +x script/* && sed -i 's/\r$//' script/*
 RUN script/setup --dev
 RUN script/dev_build
 RUN script/package
@@ -22,9 +23,10 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 WORKDIR /app
 COPY --from=builder /app/dist/piper_tts-*linux*.whl ./dist/
 RUN pip3 install ./dist/piper_tts-*linux*.whl
-RUN pip3 install 'flask>=3,<4'
+RUN pip3 install 'flask>=3,<4' 'fastapi>=0.100.0' 'uvicorn>=0.20.0'
 
 COPY docker/entrypoint.sh /
+RUN chmod +x /entrypoint.sh && sed -i 's/\r$//' /entrypoint.sh
 
 EXPOSE 5000
 
