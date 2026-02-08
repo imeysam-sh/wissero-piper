@@ -4,19 +4,55 @@ import argparse
 import io
 import json
 import logging
+import os
 import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Generator
 from urllib.request import urlopen
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import FastAPI, Request, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import PiperVoice, SynthesisConfig
 from .download_voices import VOICES_JSON, download_voice
 
 _LOGGER = logging.getLogger(__name__)
+
+# API Key from environment variable (optional)
+API_KEY = os.environ.get("PIPER_API_KEY", "")
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    """Middleware to check API key if PIPER_API_KEY is set."""
+    
+    async def dispatch(self, request: Request, call_next):
+        if not API_KEY:
+            # No API key configured, allow all requests
+            return await call_next(request)
+        
+        # Check Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            if token == API_KEY:
+                return await call_next(request)
+        
+        # Check api_key query parameter
+        api_key_param = request.query_params.get("api_key", "")
+        if api_key_param == API_KEY:
+            return await call_next(request)
+        
+        # Check X-API-Key header
+        x_api_key = request.headers.get("X-API-Key", "")
+        if x_api_key == API_KEY:
+            return await call_next(request)
+        
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid or missing API key"}
+        )
 
 
 def main() -> None:
@@ -104,6 +140,11 @@ def main() -> None:
 
     # Create web server
     app = FastAPI()
+    
+    # Add API key middleware if PIPER_API_KEY is set
+    if API_KEY:
+        app.add_middleware(APIKeyMiddleware)
+        _LOGGER.info("API key authentication enabled")
 
     @app.get("/voices")
     async def app_voices() -> Dict[str, Any]:
