@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  piper:
+    build: .
+    container_name: piper_tts
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./piper_data:/data
+    restart: unless-stopped
+    # Default command starts the server with the specified model.
+    # Ensure you download the model first!
+    command: server -m /data/de_DE-thorsten-medium.onnx

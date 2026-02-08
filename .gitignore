@@ -27,3 +27,6 @@ lightning_logs/
 test_*.json
 test.json
 voices.json
+
+# Local data
+piper_data/
